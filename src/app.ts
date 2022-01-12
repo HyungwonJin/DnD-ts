@@ -1,3 +1,40 @@
+// Project State Management
+class ProjectState {
+  private listeners: any[] = []; // 함수의 배열(상태의 변화가 있으면 모든 listener 함수를 불러냄)
+  private projects: any[] = []; // {id, title, description, manday}가 들어 있는 객체의 배열
+  private static instance: ProjectState;
+
+  private constructor() {}
+
+  // 해당 인스턴스를 가지고 있으면 그것을 반환, 아니면 새로 만들어서 반환
+  static getInstance() {
+    if (this.instance) {
+      return this.instance;
+    }
+    this.instance = new ProjectState();
+    return this.instance;
+  }
+
+  addListener(listenerFn: Function) {
+    this.listeners.push(listenerFn);
+  }
+
+  addProject(title: string, decsription: string, manday: number) {
+    const newProject = {
+      id: Math.random().toString(),
+      title: title,
+      decsription: decsription,
+      manday: manday,
+    };
+    this.projects.push(newProject);
+    for (const listenerFn of this.listeners) {
+      listenerFn(this.projects.slice());
+    }
+  }
+}
+
+const projectState = ProjectState.getInstance();
+
 // Validation
 interface Validatable {
   value: string | number;
@@ -47,13 +84,16 @@ class ProjectList {
   templateElement: HTMLTemplateElement;
   hostElement: HTMLDivElement;
   element: HTMLElement;
+  assignedProject: any[];
 
-  // 조금 더 알아볼 필요가 있음
+  // 들어오는 인수 목록을 직접 만들어 줄 수 있음
   constructor(private type: "active" | "finished") {
     this.templateElement = document.getElementById(
       "project-list"
     )! as HTMLTemplateElement;
     this.hostElement = document.getElementById("app")! as HTMLDivElement;
+    this.assignedProject = [];
+
     // this.templateElement.content는 templateElement 바로 안에 있는 요소를 나타냄
     const importedNode = document.importNode(
       this.templateElement.content,
@@ -61,8 +101,27 @@ class ProjectList {
     );
     this.element = importedNode.firstElementChild as HTMLElement;
     this.element.id = `${this.type}-projects`;
+    // addListener()는 새로운 변화가 있을때만 불러와짐
+    // 따라서 아래의 attach, renderContent가 먼저 실행된
+    projectState.addListener((projects: any[]) => {
+      this.assignedProject = projects;
+      this.renderProjects();
+    });
+
     this.attach();
     this.renderContent();
+  }
+
+  private renderProjects() {
+    const listEl = document.getElementById(
+      `${this.type}-projects-list`
+    )! as HTMLUListElement;
+    // this.assignedProject는 입력값들이 들어있는 객체 배열
+    for (const prjItem of this.assignedProject) {
+      const listItem = document.createElement("li");
+      listItem.textContent = prjItem.title;
+      listEl?.appendChild(listItem);
+    }
   }
 
   private renderContent() {
@@ -117,7 +176,6 @@ class ProjectInput {
     const enteredTitle = this.titleInputElement.value;
     const enteredDescription = this.descriptionInputElement.value;
     const enteredManday = this.mandayInputElement.value;
-
     const titleValidatable: Validatable = {
       value: enteredTitle,
       required: true,
@@ -125,7 +183,7 @@ class ProjectInput {
     const descriptionValidatable: Validatable = {
       value: enteredDescription,
       required: true,
-      minLength: 5,
+      minLength: 1,
     };
     const mandayValidatable: Validatable = {
       value: +enteredManday,
@@ -157,6 +215,7 @@ class ProjectInput {
     if (Array.isArray(userInput)) {
       const [title, desc, manday] = userInput;
       console.log(title, desc, manday);
+      projectState.addProject(title, desc, manday);
       this.clearInputs();
     }
   }
