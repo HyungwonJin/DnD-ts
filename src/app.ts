@@ -1,7 +1,25 @@
+// Project Type
+enum ProjectStatus {
+  Active,
+  Finished,
+}
+
+class Project {
+  constructor(
+    public id: string,
+    public title: string,
+    public description: string,
+    public manday: number,
+    public status: ProjectStatus
+  ) {}
+}
+
 // Project State Management
+type Listener = (items: Project[]) => void;
+
 class ProjectState {
-  private listeners: any[] = []; // 함수의 배열(상태의 변화가 있으면 모든 listener 함수를 불러냄)
-  private projects: any[] = []; // {id, title, description, manday}가 들어 있는 객체의 배열
+  private listeners: Listener[] = []; // 함수의 배열(상태의 변화가 있으면 모든 listener 함수를 불러냄)
+  private projects: Project[] = []; // {id, title, description, manday}가 들어 있는 객체의 배열
   private static instance: ProjectState;
 
   private constructor() {}
@@ -15,17 +33,18 @@ class ProjectState {
     return this.instance;
   }
 
-  addListener(listenerFn: Function) {
+  addListener(listenerFn: Listener) {
     this.listeners.push(listenerFn);
   }
 
   addProject(title: string, decsription: string, manday: number) {
-    const newProject = {
-      id: Math.random().toString(),
-      title: title,
-      decsription: decsription,
-      manday: manday,
-    };
+    const newProject = new Project(
+      Math.random().toString(),
+      title,
+      decsription,
+      manday,
+      ProjectStatus.Active
+    );
     this.projects.push(newProject);
     for (const listenerFn of this.listeners) {
       listenerFn(this.projects.slice());
@@ -84,7 +103,7 @@ class ProjectList {
   templateElement: HTMLTemplateElement;
   hostElement: HTMLDivElement;
   element: HTMLElement;
-  assignedProject: any[];
+  assignedProject: Project[];
 
   // 들어오는 인수 목록을 직접 만들어 줄 수 있음
   constructor(private type: "active" | "finished") {
@@ -103,7 +122,7 @@ class ProjectList {
     this.element.id = `${this.type}-projects`;
     // addListener()는 새로운 변화가 있을때만 불러와짐
     // 따라서 아래의 attach, renderContent가 먼저 실행된
-    projectState.addListener((projects: any[]) => {
+    projectState.addListener((projects: Project[]) => {
       this.assignedProject = projects;
       this.renderProjects();
     });
