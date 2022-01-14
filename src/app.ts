@@ -123,7 +123,13 @@ class ProjectList {
     // addListener()는 새로운 변화가 있을때만 불러와짐
     // 따라서 아래의 attach, renderContent가 먼저 실행된
     projectState.addListener((projects: Project[]) => {
-      this.assignedProject = projects;
+      const relevantProjects = projects.filter((prj) => {
+        if (this.type === "active") {
+          return prj.status === ProjectStatus.Active;
+        }
+        return prj.status === ProjectStatus.Finished;
+      });
+      this.assignedProject = relevantProjects;
       this.renderProjects();
     });
 
@@ -135,6 +141,7 @@ class ProjectList {
     const listEl = document.getElementById(
       `${this.type}-projects-list`
     )! as HTMLUListElement;
+    listEl.innerHTML = "";
     // this.assignedProject는 입력값들이 들어있는 객체 배열
     for (const prjItem of this.assignedProject) {
       const listItem = document.createElement("li");
