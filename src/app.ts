@@ -15,14 +15,25 @@ class Project {
 }
 
 // Project State Management
-type Listener = (items: Project[]) => void;
+type Listener<T> = (items: T[]) => void;
 
-class ProjectState {
-  private listeners: Listener[] = []; // 함수의 배열(상태의 변화가 있으면 모든 listener 함수를 불러냄)
+class State<T> {
+  // 함수의 배열(상태의 변화가 있으면 모든 listener 함수를 불러냄)
+  protected listeners: Listener<T>[] = [];
+  // protected는 외부에서는 접근할 수 없지만 계승한 곳에서는 접근할 수 있다는 뜻
+
+  addListener(listenerFn: Listener<T>) {
+    this.listeners.push(listenerFn);
+  }
+}
+
+class ProjectState extends State<Project> {
   private projects: Project[] = []; // {id, title, description, manday}가 들어 있는 객체의 배열
   private static instance: ProjectState;
 
-  private constructor() {}
+  private constructor() {
+    super();
+  }
 
   // 해당 인스턴스를 가지고 있으면 그것을 반환, 아니면 새로 만들어서 반환
   static getInstance() {
@@ -31,10 +42,6 @@ class ProjectState {
     }
     this.instance = new ProjectState();
     return this.instance;
-  }
-
-  addListener(listenerFn: Listener) {
-    this.listeners.push(listenerFn);
   }
 
   addProject(title: string, decsription: string, manday: number) {
@@ -98,28 +105,60 @@ function validate(validatableInput: Validatable) {
   return isValid;
 }
 
-// ProjectList Class
-class ProjectList {
+// Component Class
+// 항상 계승해서 사용할 것이기 때문에 abstract를 붙임 => instant화 되지 않음
+abstract class Component<T extends HTMLElement, U extends HTMLElement> {
   templateElement: HTMLTemplateElement;
-  hostElement: HTMLDivElement;
-  element: HTMLElement;
-  assignedProject: Project[];
+  hostElement: T;
+  element: U;
 
-  // 들어오는 인수 목록을 직접 만들어 줄 수 있음
-  constructor(private type: "active" | "finished") {
+  constructor(
+    templateId: string,
+    hostElementId: string,
+    insertAtStart: boolean,
+    newElementId?: string
+  ) {
     this.templateElement = document.getElementById(
-      "project-list"
+      templateId
     )! as HTMLTemplateElement;
-    this.hostElement = document.getElementById("app")! as HTMLDivElement;
-    this.assignedProject = [];
-
+    this.hostElement = document.getElementById(hostElementId)! as T;
     // this.templateElement.content는 templateElement 바로 안에 있는 요소를 나타냄
     const importedNode = document.importNode(
       this.templateElement.content,
       true
     );
-    this.element = importedNode.firstElementChild as HTMLElement;
-    this.element.id = `${this.type}-projects`;
+    this.element = importedNode.firstElementChild as U;
+    if (newElementId) {
+      this.element.id = newElementId;
+    }
+    this.attach(insertAtStart);
+  }
+
+  abstract configure(): void;
+  abstract renderContent(): void;
+
+  private attach(insertAtBeginning: boolean) {
+    this.hostElement.insertAdjacentElement(
+      insertAtBeginning ? "afterbegin" : "beforeend",
+      this.element
+    );
+  }
+}
+
+// ProjectList Class
+class ProjectList extends Component<HTMLDivElement, HTMLElement> {
+  assignedProject: Project[];
+
+  // 들어오는 인수 목록을 직접 만들어 줄 수 있음
+  constructor(private type: "active" | "finished") {
+    super("project-list", "app", false, `${type}-projects`);
+    this.assignedProject = [];
+
+    this.configure();
+    this.renderContent();
+  }
+
+  configure() {
     // addListener()는 새로운 변화가 있을때만 불러와짐
     // 따라서 아래의 attach, renderContent가 먼저 실행된
     projectState.addListener((projects: Project[]) => {
@@ -132,9 +171,12 @@ class ProjectList {
       this.assignedProject = relevantProjects;
       this.renderProjects();
     });
-
-    this.attach();
-    this.renderContent();
+  }
+  renderContent() {
+    const listId = `${this.type}-projects-list`;
+    this.element.querySelector("ul")!.id = listId;
+    this.element.querySelector("h2")!.textContent =
+      this.type === "active" ? "실행 중인 프로젝트" : "완료된 프로젝트";
   }
 
   private renderProjects() {
@@ -149,40 +191,16 @@ class ProjectList {
       listEl?.appendChild(listItem);
     }
   }
-
-  private renderContent() {
-    const listId = `${this.type}-projects-list`;
-    this.element.querySelector("ul")!.id = listId;
-    this.element.querySelector("h2")!.textContent =
-      this.type === "active" ? "실행 중인 프로젝트" : "완료된 프로젝트";
-  }
-
-  private attach() {
-    this.hostElement.insertAdjacentElement("beforeend", this.element);
-  }
 }
 
 // ProjectInput Class
-class ProjectInput {
-  templateElement: HTMLTemplateElement;
-  hostElement: HTMLDivElement;
-  element: HTMLFormElement;
+class ProjectInput extends Component<HTMLDivElement, HTMLFormElement> {
   titleInputElement: HTMLInputElement;
   descriptionInputElement: HTMLInputElement;
   mandayInputElement: HTMLInputElement;
 
   constructor() {
-    this.templateElement = document.getElementById(
-      "project-input"
-    )! as HTMLTemplateElement;
-    this.hostElement = document.getElementById("app")! as HTMLDivElement;
-    // this.templateElement.content는 templateElement 바로 안에 있는 요소를 나타냄
-    const importedNode = document.importNode(
-      this.templateElement.content,
-      true
-    );
-    this.element = importedNode.firstElementChild as HTMLFormElement;
-    this.element.id = "user-input";
+    super("project-input", "app", true, "user-input");
 
     this.titleInputElement = this.element.querySelector(
       "#title"
@@ -195,8 +213,13 @@ class ProjectInput {
     ) as HTMLInputElement;
 
     this.configure();
-    this.attach();
   }
+
+  configure() {
+    this.element.addEventListener("submit", this.submitHandler.bind(this));
+  }
+
+  renderContent() {}
 
   private gatherUserInput(): [string, string, number] | void {
     const enteredTitle = this.titleInputElement.value;
@@ -244,14 +267,6 @@ class ProjectInput {
       projectState.addProject(title, desc, manday);
       this.clearInputs();
     }
-  }
-
-  private configure() {
-    this.element.addEventListener("submit", this.submitHandler.bind(this));
-  }
-
-  private attach() {
-    this.hostElement.insertAdjacentElement("afterbegin", this.element);
   }
 }
 
